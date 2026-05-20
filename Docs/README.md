@@ -1,6 +1,6 @@
 # RitsuLib — Documentation Index
 
-**English** → [en/](en/) &nbsp;|&nbsp; **中文** → [zh/](zh/)
+**从上游同步文档** → [UPDATING.md](UPDATING.md) &nbsp;|&nbsp; **English** → [en/](en/) &nbsp;|&nbsp; **中文** → [zh/](zh/)
 
 ---
 

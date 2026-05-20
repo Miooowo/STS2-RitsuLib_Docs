@@ -9,7 +9,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "sync-docs": "node scripts/sync-docs.mjs",
-    "import-upstream-guide": "node scripts/import-upstream-guide.mjs"
+    "import-upstream-guide": "node scripts/import-upstream-guide.mjs",
+    "update-docs": "npm run import-upstream-guide && npm run sync-docs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.38.3",

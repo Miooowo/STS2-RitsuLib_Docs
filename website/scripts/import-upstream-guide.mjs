@@ -13,31 +13,7 @@ const repoRoot = path.resolve(import.meta.dirname, '..', '..');
 const zhDir = path.join(repoRoot, 'Docs', 'zh');
 const enDir = path.join(repoRoot, 'Docs', 'en');
 
-const GUIDE_FILES = [
-	'index.md',
-	'getting-started.md',
-	'framework-design.md',
-	'terminology.md',
-	'diagnostics-and-compatibility.md',
-	'content-authoring-toolkit.md',
-	'content-packs-and-registries.md',
-	'character-and-unlock-scaffolding.md',
-	'timeline-and-unlocks.md',
-	'custom-events.md',
-	'card-dynamic-var-toolkit.md',
-	'loc-string-placeholder-resolution.md',
-	'localization-and-keywords.md',
-	'lifecycle-events.md',
-	'persistence-guide.md',
-	'patching-guide.md',
-	'mod-settings.md',
-	'asset-profiles-and-fallbacks.md',
-	'creature-visuals-and-animation.md',
-	'godot-scene-authoring.md',
-	'fmod-and-audio.md',
-	'shell-theme.md',
-	'telemetry-backend.md',
-];
+const GUIDE_TREE_PATH = 'docs/pages/guide';
 
 function kebabToPascal(kebab) {
 	return kebab
@@ -112,6 +88,35 @@ function toDoc(title, body) {
 	return `# ${title}\n\n${cleaned}\n`;
 }
 
+function listUpstreamGuideFiles() {
+	const out = execFileSync(
+		'git',
+		['ls-tree', '-r', '--name-only', UPSTREAM_REF, GUIDE_TREE_PATH],
+		{ cwd: repoRoot, encoding: 'utf8' },
+	);
+	return out
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line.endsWith('.md'))
+		.map((line) => path.basename(line))
+		.sort((a, b) => {
+			if (a === 'index.md') return -1;
+			if (b === 'index.md') return 1;
+			return a.localeCompare(b);
+		});
+}
+
+/** @returns {Set<string>} */
+async function readSidebarSlugs() {
+	const cfgPath = path.join(repoRoot, 'website', 'astro.config.mjs');
+	const cfg = await fs.readFile(cfgPath, 'utf8');
+	const slugs = new Set();
+	for (const m of cfg.matchAll(/\bslug:\s*'([^']+)'/g)) {
+		slugs.add(m[1]);
+	}
+	return slugs;
+}
+
 function readGuideFile(name) {
 	const gitPath = `docs/pages/guide/${name}`;
 	try {
@@ -131,11 +136,19 @@ function readGuideFile(name) {
 await fs.mkdir(zhDir, { recursive: true });
 await fs.mkdir(enDir, { recursive: true });
 
+const GUIDE_FILES = listUpstreamGuideFiles();
+if (GUIDE_FILES.length === 0) {
+	throw new Error(`No .md files under ${UPSTREAM_REF}:${GUIDE_TREE_PATH}`);
+}
+
 const slugToPascal = new Map();
 for (const file of GUIDE_FILES) {
 	const stem = path.basename(file, '.md');
 	slugToPascal.set(stem, kebabToPascal(stem));
 }
+
+const sidebarSlugs = await readSidebarSlugs();
+const missingFromSidebar = [];
 
 let count = 0;
 for (const file of GUIDE_FILES) {
@@ -169,8 +182,18 @@ for (const file of GUIDE_FILES) {
 			'Upstream: [BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide).\n';
 		await fs.writeFile(enPath, enOut, 'utf8');
 	}
+	const slug = stem === 'index' ? 'index' : stem;
+	if (slug !== 'index' && !sidebarSlugs.has(slug)) {
+		missingFromSidebar.push(slug);
+	}
 	count++;
 	console.log(`  ${file} → ${pascal}.md (zh: ${zhBody ? 'yes' : 'no'}, en: ${enBody ? 'yes' : 'no'})`);
 }
 
 console.log(`Imported ${count} guide pages from upstream → ${zhDir} & ${enDir}`);
+if (missingFromSidebar.length > 0) {
+	console.warn(
+		'\nWarning: upstream pages not in website/astro.config.mjs sidebar (add slug + translations):',
+	);
+	for (const slug of missingFromSidebar) console.warn(`  - ${slug}`);
+}
