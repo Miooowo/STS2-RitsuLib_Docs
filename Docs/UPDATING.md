@@ -24,7 +24,7 @@ git fetch upstream main --depth 1
 cd website
 npm run update-docs    # import-upstream-guide + sync-docs
 npm run build
-npm run preview        # http://127.0.0.1:4321/STS2-RitsuLib/
+npm run preview        # http://127.0.0.1:4321/STS2-RitsuLib_Docs/
 ```
 
 Optional pin:
@@ -41,7 +41,7 @@ git commit -m "docs: sync guide from upstream main (<summary>)"
 git push origin docs
 ```
 
-Merge into **`main`** (or apply the same paths on `main`) to trigger [Deploy documentation](../.github/workflows/deploy-docs.yml).
+Push to the **`docs`** branch on [Miooowo/STS2-RitsuLib_Docs](https://github.com/Miooowo/STS2-RitsuLib_Docs) to trigger [Deploy documentation](../.github/workflows/deploy-docs.yml). Published site: [miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/).
 
 ## New upstream pages
 

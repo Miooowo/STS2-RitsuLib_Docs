@@ -40,4 +40,4 @@ Read [Getting started](GettingStarted.md) first if the mod does not already refe
 | Build a telemetry backend | [Telemetry backend](TelemetryBackend.md) |
 | Check diagnostics and game-source notes | [Diagnostics and compatibility](DiagnosticsAndCompatibility.md) |
 
-Sources: [`Docs/en`](https://github.com/Miooowo/STS2-RitsuLib/tree/docs/Docs/en). Upstream: [BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide).
+Sources: [`Docs/en`](https://github.com/Miooowo/STS2-RitsuLib_Docs/tree/docs/Docs/en). Site: [miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/). Upstream: [BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide).

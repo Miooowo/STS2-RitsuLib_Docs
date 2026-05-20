@@ -2,9 +2,9 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// GitHub Pages 项目页：https://miooowo.github.io/STS2-RitsuLib/
+// GitHub Pages 项目页：https://miooowo.github.io/STS2-RitsuLib_Docs/
 const site = 'https://miooowo.github.io';
-const base = '/STS2-RitsuLib';
+const base = '/STS2-RitsuLib_Docs';
 
 /** @param {string} zh @param {string} en */
 const lb = (zh, en) => ({ label: zh, translations: { en } });
@@ -35,7 +35,7 @@ export default defineConfig({
 				{
 					icon: 'github',
 					label: 'GitHub',
-					href: 'https://github.com/Miooowo/STS2-RitsuLib',
+					href: 'https://github.com/Miooowo/STS2-RitsuLib_Docs',
 				},
 			],
 			// 静态部署（GitHub Pages）无服务端中间件：在中文首页用客户端根据语言偏好跳转 /en/（与 cookie `ritsulib-locale` 协同）

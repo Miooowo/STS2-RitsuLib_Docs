@@ -1,6 +1,6 @@
 # RitsuLib — Documentation index
 
-**Maintainer guide** → [UPDATING.md](UPDATING.md) &nbsp;|&nbsp; **Repository overview** → [../README.md](../README.md) &nbsp;|&nbsp; **Sources:** [en/](en/) · [zh/](zh/)
+**维护说明** → [UPDATING.md](UPDATING.md) &nbsp;|&nbsp; **仓库说明** → [../README.zh-CN.md](../README.zh-CN.md) · [../README.md](../README.md) &nbsp;|&nbsp; **在线站点** → [miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/) &nbsp;|&nbsp; **源文件** [en/](en/) · [zh/](zh/)
 
 ---
 

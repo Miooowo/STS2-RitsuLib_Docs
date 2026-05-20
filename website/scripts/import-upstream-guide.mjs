@@ -169,7 +169,8 @@ for (const file of GUIDE_FILES) {
 		let zhOut = toDoc(zhTitle, zhBody);
 		if (stem === 'index') {
 			zhOut +=
-				'\n本站点文档源文件位于仓库 [`Docs/zh`](https://github.com/Miooowo/STS2-RitsuLib/tree/docs/Docs/zh)。' +
+				'\n本站点文档源文件位于仓库 [`Docs/zh`](https://github.com/Miooowo/STS2-RitsuLib_Docs/tree/docs/Docs/zh)。' +
+				'在线站点：[miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/)。' +
 				'上游参考：[BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide)。\n';
 		}
 		await fs.writeFile(path.join(zhDir, `${pascal}.md`), zhOut, 'utf8');
@@ -178,7 +179,8 @@ for (const file of GUIDE_FILES) {
 		let enPath = path.join(enDir, `${pascal}.md`);
 		let enOut = await fs.readFile(enPath, 'utf8');
 		enOut +=
-			'\nSources: [`Docs/en`](https://github.com/Miooowo/STS2-RitsuLib/tree/docs/Docs/en). ' +
+			'\nSources: [`Docs/en`](https://github.com/Miooowo/STS2-RitsuLib_Docs/tree/docs/Docs/en). ' +
+			'Site: [miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/). ' +
 			'Upstream: [BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide).\n';
 		await fs.writeFile(enPath, enOut, 'utf8');
 	}

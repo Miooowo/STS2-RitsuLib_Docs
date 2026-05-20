@@ -40,4 +40,4 @@
 | 编写遥测后端 | [遥测后端](TelemetryBackend.md) |
 | 查看诊断和游戏源码注意点 | [诊断与兼容](DiagnosticsAndCompatibility.md) |
 
-本站点文档源文件位于仓库 [`Docs/zh`](https://github.com/Miooowo/STS2-RitsuLib/tree/docs/Docs/zh)。上游参考：[BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide)。
+本站点文档源文件位于仓库 [`Docs/zh`](https://github.com/Miooowo/STS2-RitsuLib_Docs/tree/docs/Docs/zh)。在线站点：[miooowo.github.io/STS2-RitsuLib_Docs](https://miooowo.github.io/STS2-RitsuLib_Docs/)。上游参考：[BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide)。
