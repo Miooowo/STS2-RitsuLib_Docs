@@ -1,5 +1,5 @@
 /**
- * 路径映射逻辑单元测试（与 locale-redirect-snippet 内联脚本一致）
+ * 路径映射与策略单元测试（与 locale-redirect-snippet 一致）
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -19,8 +19,7 @@ function isZhPath(p) {
 }
 function zhToEn(p) {
 	if (p === PC) return PC + '/en/';
-	const s = p.slice(PC.length);
-	return PC + '/en' + s + '/';
+	return PC + '/en' + p.slice(PC.length) + '/';
 }
 function enToZh(p) {
 	if (p === PC + '/en') return PC + '/';
@@ -29,22 +28,23 @@ function enToZh(p) {
 	return PC + s + '/';
 }
 
-test('zh home → en home', () => {
-	assert.equal(zhToEn(pathNorm(`${PC}/`)), `${PC}/en/`);
-});
-
-test('zh inner page → en inner page', () => {
+test('zh inner → en inner', () => {
 	const zh = pathNorm(`${PC}/getting-started/`);
 	assert.equal(zhToEn(zh), `${PC}/en/getting-started/`);
 });
 
-test('en inner page → zh inner page', () => {
+test('en inner → zh inner', () => {
 	const en = pathNorm(`${PC}/en/getting-started/`);
 	assert.equal(enToZh(en), `${PC}/getting-started/`);
 });
 
-test('refresh: en cookie on zh URL should target en path', () => {
-	const p = pathNorm(`${PC}/getting-started/`);
+test('starlight lang select value maps to en path', () => {
+	const ap = pathNorm('/STS2-RitsuLib_Docs/en/getting-started/');
+	assert.ok(isEnPath(ap));
+});
+
+test('first visit: en preference on zh URL targets en', () => {
+	const p = pathNorm(`${PC}/`);
 	assert.ok(isZhPath(p));
-	assert.equal(zhToEn(p), `${PC}/en/getting-started/`);
+	assert.equal(zhToEn(p), `${PC}/en/`);
 });
