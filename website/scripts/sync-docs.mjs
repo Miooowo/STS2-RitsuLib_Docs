@@ -87,5 +87,23 @@ for (const file of enFiles) {
 	await syncFile(path.join(enDir, file), path.join(enOut, destName), slug);
 }
 
+const expectedZh = new Set(zhFiles.map((f) => `${stemToSlug.get(path.basename(f, '.md'))}.md`));
+const expectedEn = new Set(enFiles.map((f) => `${stemToSlug.get(path.basename(f, '.md'))}.md`));
+
+/** @param {string} dir @param {Set<string>} keepNames */
+async function pruneOrphanOut(dir, keepNames) {
+	let removed = 0;
+	for (const name of await fs.readdir(dir)) {
+		if (!name.endsWith('.md') || keepNames.has(name)) continue;
+		await fs.unlink(path.join(dir, name));
+		console.log(`  removed orphan ${path.relative(root, path.join(dir, name))}`);
+		removed++;
+	}
+	return removed;
+}
+
+const pruned = (await pruneOrphanOut(docsOut, expectedZh)) + (await pruneOrphanOut(enOut, expectedEn));
+
 console.log(`Synced ${zhFiles.length} zh → ${docsOut}`);
 console.log(`Synced ${enFiles.length} en → ${enOut}`);
+if (pruned > 0) console.log(`Pruned ${pruned} orphan file(s) under src/content/docs`);

@@ -149,6 +149,21 @@ for (const file of GUIDE_FILES) {
 
 const sidebarSlugs = await readSidebarSlugs();
 const missingFromSidebar = [];
+const keepPascal = new Set(slugToPascal.values());
+
+/** @param {string} dir @param {Set<string>} keepStems PascalCase stems without .md */
+async function pruneOrphanDocs(dir, keepStems) {
+	let removed = 0;
+	for (const name of await fs.readdir(dir)) {
+		if (!name.endsWith('.md')) continue;
+		const stem = path.basename(name, '.md');
+		if (keepStems.has(stem)) continue;
+		await fs.unlink(path.join(dir, name));
+		console.log(`  removed orphan ${path.relative(repoRoot, path.join(dir, name))}`);
+		removed++;
+	}
+	return removed;
+}
 
 let count = 0;
 for (const file of GUIDE_FILES) {
@@ -190,6 +205,12 @@ for (const file of GUIDE_FILES) {
 	}
 	count++;
 	console.log(`  ${file} → ${pascal}.md (zh: ${zhBody ? 'yes' : 'no'}, en: ${enBody ? 'yes' : 'no'})`);
+}
+
+const prunedZh = await pruneOrphanDocs(zhDir, keepPascal);
+const prunedEn = await pruneOrphanDocs(enDir, keepPascal);
+if (prunedZh + prunedEn > 0) {
+	console.log(`Pruned ${prunedZh + prunedEn} orphan file(s) under Docs/zh and Docs/en`);
 }
 
 console.log(`Imported ${count} guide pages from upstream → ${zhDir} & ${enDir}`);

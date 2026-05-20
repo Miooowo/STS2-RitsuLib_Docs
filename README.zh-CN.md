@@ -39,6 +39,8 @@ npm run preview
 
 ## 从上游同步
 
+**自动同步：** 每日运行 [Sync upstream documentation](.github/workflows/sync-upstream-docs.yml)（Actions 可手动触发）；有变更时自动提交并部署 Pages。上游新增 guide 若侧边栏无条目，仍需改 `website/astro.config.mjs`。
+
 一次性准备：
 
 ```bash
