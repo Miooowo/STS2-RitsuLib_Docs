@@ -1,46 +1,66 @@
-# STS2-RitsuLib
+# STS2 RitsuLib — Documentation
 
-Shared framework library for Slay the Spire 2 mods.
+English documentation site for the [STS2 RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib) modding framework (Slay the Spire 2). This branch contains **only** the docs toolchain and sources—no mod source code.
 
-Chinese README: [README.zh.md](README.zh.md)
+**Live site:** [https://miooowo.github.io/STS2-RitsuLib/](https://miooowo.github.io/STS2-RitsuLib/)  
+**Upstream guide (Valaxy, reference):** [BAKAOLC/STS2-RitsuLib `docs/pages/guide`](https://github.com/BAKAOLC/STS2-RitsuLib/tree/main/docs/pages/guide)
 
-RitsuLib is maintained as a practical authoring library. API growth is demand-driven and focused on the patterns used by
-the bundled mods.
+## Repository layout
 
-The library exists alongside [BaseLib](https://github.com/Alchyr/BaseLib-StS2) and currently does not conflict with it.
+| Path | Purpose |
+|------|---------|
+| [`Docs/en/`](Docs/en/) | English Markdown sources (PascalCase filenames) |
+| [`Docs/zh/`](Docs/zh/) | Chinese Markdown sources |
+| [`Docs/README.md`](Docs/README.md) | Topic index (tables) |
+| [`Docs/UPDATING.md`](Docs/UPDATING.md) | Maintainer workflow: sync from upstream |
+| [`website/`](website/) | [Astro Starlight](https://starlight.astro.build/) site (`base: /STS2-RitsuLib`) |
+| [`.github/workflows/deploy-docs.yml`](.github/workflows/deploy-docs.yml) | Build & deploy to GitHub Pages |
 
-Documentation index: [Docs/README.md](Docs/README.md)
+We use **Starlight**, not the upstream Valaxy `docs/` app. Do not copy upstream `docs/package.json`, `valaxy.config.ts`, etc.
 
-## Mod Settings
+## Local development
 
-RitsuLib includes a settings UI layer for player-editable values.
+```bash
+cd website
+npm ci
+npm run dev
+```
 
-- register pages explicitly with `RitsuLibFramework.RegisterModSettings(...)`
-- bind controls to `ModDataStore` instead of introducing a separate configuration backend
-- source labels and descriptions from `I18N` or game-native `LocString`
-- keep RitsuLib settings registration independent from BaseLib's config-page registry and file paths
+Open [http://localhost:4321/STS2-RitsuLib/](http://localhost:4321/STS2-RitsuLib/) (Chinese at `/`, English at `/en/`).
 
-Guide: [Docs/en/ModSettings.md](Docs/en/ModSettings.md)
+Production build:
 
-## Debug Compatibility Mode
+```bash
+cd website
+npm run build
+npm run preview
+```
 
-`debug_compatibility_mode` defaults to **off**. In that state, patched systems keep vanilla behavior.
+## Sync from upstream
 
-When the master toggle is **on**, the settings page exposes per-feature compatibility fallbacks. Sub-toggles default to
-**on**.
+One-time:
 
-| Sub-setting                    | Effect when enabled                                                                                 |
-|--------------------------------|-----------------------------------------------------------------------------------------------------|
-| LocTable missing keys          | Resolve to placeholder `LocString` values and log one `[Localization][DebugCompat]` warning per key |
-| Invalid unlock epochs          | Skip invalid epoch grants and log one `[Unlocks][DebugCompat]` warning per stable key               |
-| THE_ARCHITECT missing dialogue | Inject empty `Lines` entries for `ModContentRegistry` characters when vanilla provides no dialogue  |
+```bash
+git remote add upstream https://github.com/BAKAOLC/STS2-RitsuLib.git   # if needed
+git fetch upstream main --depth 1
+```
 
-Disabling a sub-toggle removes only that fallback.
+Each update:
 
-Windows settings path:
+```bash
+git fetch upstream main --depth 1
+cd website
+npm run update-docs   # import-upstream-guide + sync-docs
+npm run build
+```
 
-`%appdata%\SlayTheSpire2\steam\<user_id>\mod_data\com.ritsukage.sts2-RitsuLib\settings.json`
+See [`Docs/UPDATING.md`](Docs/UPDATING.md) for sidebar checks, commits, and what **not** to do (e.g. merging all of `upstream/main` into this branch).
+
+## Deployment
+
+- Pushes to **`main`** that touch `Docs/**` or `website/**` run **Deploy documentation** and publish via GitHub Pages (environment: `github-pages`).
+- The **`docs`** branch is the documentation-only line; merge or cherry-pick doc changes into **`main`** to update the public site.
 
 ## License
 
-MIT
+Documentation follows the parent project. Framework code and licensing: [BAKAOLC/STS2-RitsuLib](https://github.com/BAKAOLC/STS2-RitsuLib).

@@ -1,18 +1,7 @@
-# Godot 4+ specific ignores
+node_modules/
+website/node_modules/
+website/dist/
+website/.astro/
 .godot/
-/android/
-
-.idea/
-*.sln.DotSettings.user
-artifacts/nuget/
-
-.vs/
-
-local.props
-!local.props.template
-
-# Python (scripts/release_cli.py, uv)
-__pycache__/
-*.py[cod]
-*$py.class
-.venv/
+.DS_Store
+Thumbs.db
