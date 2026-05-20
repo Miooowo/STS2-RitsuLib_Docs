@@ -1,207 +1,230 @@
-# Localization & Keywords
+# Localization And Keywords
 
-RitsuLib separates localization into two distinct layers:
+## Two Text Systems
 
-- **The base game's `LocString` model-key pipeline** — in-game text such as model titles and descriptions
-- **Framework-provided `I18N` helper localization** — auxiliary text for the mod itself
+Use the game's localization tables for game content. Use `I18N` for your own UI strings.
 
-It also provides a lightweight keyword registry to unify hover tips and keyword text.
+| Need | Use |
+| --- | --- |
+| Card, relic, potion, power, character, event, ancient, epoch text | Game loc tables such as `cards`, `relics`, `events`, `ancients`, `epochs` |
+| Keyword title / description | `card_keywords` for card keywords, or `static_hover_tips` for general hover tips |
+| Settings UI, debug panels, small mod UI | `I18N` through `CreateModLocalization(...)` |
+| A game API that requires `LocString`, backed by your own JSON | Register an `I18N` virtual loc table |
 
----
+File names use game language codes such as `eng.json`, `zhs.json`, and `jpn.json`.
 
-## Game Model Localization
+## Entry Keys
 
-> The following describes the game engine's own localization mechanism; RitsuLib does not replace this system.
-
-The game reads model text through `LocString` and various localization tables, commonly including:
-
-- `cards`
-- `relics`
-- `powers`
-- `characters`
-- `card_keywords`
-
-Those keys are built on `ModelId.Entry`.
-
-RitsuLib's role is limited to making model identity more stable and predictable so keys are easier to author. For concrete model ID rules, see [Content Authoring Toolkit](ContentAuthoringToolkit.md).
-
----
-
-## `CreateLocalization` And `CreateModLocalization`
-
-`I18N` is RitsuLib's helper-text localization system, independent of the game's `LocString`:
-
-```csharp
-var i18n = RitsuLibFramework.CreateModLocalization(
-    modId: "MyMod",
-    instanceName: "MyMod-I18N",
-    resourceFolders: ["MyMod.localization"],
-    pckFolders: ["res://MyMod/localization"]);
-```
-
-`CreateModLocalization` is a convenience wrapper over `CreateLocalization`.
-If you do not provide file-system folders, it defaults to:
+For RitsuLib-registered pool content, the public entry is the localization stem:
 
 ```text
-user://mod-configs/<modId>/localization
+MY_MOD_CARD_MY_STRIKE
 ```
 
----
+The key goes into the table used by the model type:
 
-## Source Merge Order
+| Model | Table | Common keys |
+| --- | --- | --- |
+| Card | `cards` | `{ENTRY}.title`, `{ENTRY}.description`, `{ENTRY}.selectionScreenPrompt` |
+| Relic | `relics` | `{ENTRY}.title`, `{ENTRY}.description`, `{ENTRY}.flavor`, `{ENTRY}.selectionScreenPrompt` |
+| Potion | `potions` | `{ENTRY}.title`, `{ENTRY}.description`, `{ENTRY}.selectionScreenPrompt` |
+| Power | `powers` | `{ENTRY}.title`, `{ENTRY}.description` |
+| Character | `characters` | `{ENTRY}.title`, pronoun keys, card modifier keys, unlock text |
+| Act | `acts` | `{ENTRY}.title` |
+| Encounter | `encounters` | `{ENTRY}.title`, `{ENTRY}.loss`, `{ENTRY}.customRewardDescription` |
+| Event | `events` | `{ENTRY}.pages.<PAGE>.description`, `{ENTRY}.pages.<PAGE>.options.<OPTION>` |
+| Ancient event | `ancients` | event page keys plus `talk` dialogue keys |
+| Epoch | `epochs` | `{ID}.title`, `{ID}.description`, `{ID}.unlockInfo`, `{ID}.unlockText` |
+| Card pile / top-bar button / shared tooltip | `static_hover_tips` | `{ID}.title`, `{ID}.description`; card piles also use `{ID}.empty` |
 
-`I18N` can merge translations from three source kinds:
+Card example in `cards/eng.json`:
 
-1. file system folders
-2. embedded resources
-3. PCK folders
-
-Merge behavior is first-wins:
-
-- file-system entries are loaded first
-- embedded entries only fill missing keys
-- PCK entries only fill keys still missing after that
-
-This lets local overrides take priority over packaged defaults.
-
----
-
-## Language Normalization
-
-`I18N` normalizes locale names before loading JSON files:
-
-| Input | Normalized |
-|---|---|
-| `en`, `en_us`, `eng` | `eng` |
-| `zh`, `zh_cn`, `zh_hans` | `zhs` |
-| `ja`, `ja_jp` | `jpn` |
-
-If no language can be resolved, it falls back to `eng`.
-
----
-
-## Runtime Reload Behavior
-
-`I18N` subscribes to locale changes when possible:
-
-- when the game language changes, helper localization reloads automatically
-- `Changed` is raised after reload completes
-- if the game localization manager is unavailable at that moment, `I18N` falls back to lazy detection
-
-This behavior is independent of base-game `LocString` resolution.
-
----
-
-## Debug Compatibility Mode
-
-`LocTable` placeholder resolution is part of RitsuLib’s debug compatibility fallbacks. See [Diagnostics & Compatibility](DiagnosticsAndCompatibility.md) for the master toggle, the **LocTable missing keys** toggle, and one-time `[Localization][DebugCompat]` warnings.
-
-Use this for troubleshooting, not as a substitute for authoring real keys.
-
----
-
-## Keyword Registry
-
-Use `ModKeywordRegistry` when you want reusable keyword definitions and hover tips:
-
-```csharp
-var keywords = RitsuLibFramework.GetKeywordRegistry("MyMod");
-
-keywords.RegisterCardKeywordOwnedByLocNamespace(
-    localKeywordStem: "brew",
-    iconPath: "res://MyMod/ui/keywords/brew.png");
+```json
+{
+  "MY_MOD_CARD_MY_STRIKE.title": "Measured Strike",
+  "MY_MOD_CARD_MY_STRIKE.description": "Deal {Damage} damage."
+}
 ```
 
-This creates a normalized keyword id and binds it to title / description localization keys.
+The same keys must exist in every language you support:
 
----
-
-## Automatic keyword registration (optional: CLR attributes)
-
-If you already use `ModTypeDiscoveryHub.RegisterModAssembly(...)` to let RitsuLib scan your assemblies, you can declare keyword registration with CLR attributes:
-
-```csharp
-using STS2RitsuLib.Interop.AutoRegistration;
-
-[RegisterOwnedCardKeyword("brew", LocNamespace = "my_mod", IconPath = "res://MyMod/ui/keywords/brew.png")]
-public sealed class BrewKeywordMarker;
+```json
+{
+  "MY_MOD_CARD_MY_STRIKE.title": "精准打击",
+  "MY_MOD_CARD_MY_STRIKE.description": "造成 {Damage} 点伤害。"
+}
 ```
 
-`LocNamespace` only affects the localization namespace (the `modid` portion). The keyword stem (`brew`) participates in the default rule `<namespace>_<keyword>`, producing:
+## Event Keys
 
-- `<namespace>_<keyword>.title`
-- `<namespace>_<keyword>.description`
-
-> Compatibility note: the legacy `LocKeyPrefix` / `locKeyPrefix` historically represents the **full stem** and is easy to misread as a prefix + keyword composition, so it is now obsolete. Use `LocNamespace` for new code.
-
----
-
-## Using Keywords In Code
-
-Common helpers:
-
-| Method | Description |
-|---|---|
-| `ModKeywordRegistry.CreateHoverTip(id)` | Create hover tip |
-| `ModKeywordRegistry.GetTitle(id)` | Get title |
-| `ModKeywordRegistry.GetDescription(id)` | Get description |
-| `keywordId.GetModKeywordCardText()` | Get card text |
-| `enumerable.ToHoverTips()` | Batch-convert to hover tips |
-
-You can also attach runtime keywords to arbitrary objects via `ModKeywordExtensions`:
+`ModEventTemplate` and `ModAncientEventTemplate` build option keys from the event entry, page name, and option name.
 
 ```csharp
-card.AddModKeyword("brew");
+protected string ModOptionKey(string pageName, string optionName);
+protected string InitialOptionKey(string optionName);
+protected LocString PageDescription(string pageName);
+```
 
-if (card.HasModKeyword("brew"))
+For event entry `MY_MOD_EVENT_QUIET_DOOR`, this convention uses:
+
+```json
+{
+  "MY_MOD_EVENT_QUIET_DOOR.pages.INITIAL.description": "A quiet door waits in the wall.",
+  "MY_MOD_EVENT_QUIET_DOOR.pages.INITIAL.options.OPEN": "[Open] Step through.",
+  "MY_MOD_EVENT_QUIET_DOOR.pages.DONE.description": "The room is quiet again."
+}
+```
+
+Keep page and option names stable after release. They are part of the player's localization and event-choice history.
+
+## Ancient Dialogue
+
+Ancient dialogue lives in the `ancients` table. Keys use:
+
+```text
+<ANCIENT_ENTRY>.talk.<CHARACTER_ENTRY>.<DIALOGUE_INDEX>-<LINE_INDEX>.<speaker>
+```
+
+`speaker` is `ancient` or `char`. Add `r` after the line index for a repeating dialogue. Every line in the same dialogue
+must either use `r` or not use it.
+
+Example for a mod ancient talking to a mod character:
+
+```json
+{
+  "MY_MOD_ANCIENT_MIRROR.talk.MY_MOD_CHARACTER_SEER.0-0.ancient": "You brought a future with you.",
+  "MY_MOD_ANCIENT_MIRROR.talk.MY_MOD_CHARACTER_SEER.0-0.next": "Continue",
+  "MY_MOD_ANCIENT_MIRROR.talk.MY_MOD_CHARACTER_SEER.0-1.char": "Then I should spend it carefully.",
+
+  "MY_MOD_ANCIENT_MIRROR.talk.ANY.0-0r.ancient": "Again, a face in the glass.",
+  "MY_MOD_ANCIENT_MIRROR.talk.ANY.0-1r.char": "Again, a choice."
+}
+```
+
+`ModAncientEventTemplate` reads:
+
+- `{ancient}.talk.firstVisitEver.*` for the first visit ever
+- `{ancient}.talk.<CHARACTER_ENTRY>.*` for a specific character
+- `{ancient}.talk.ANY.*` for character-agnostic fallback dialogue
+
+The Architect uses the same `ancients` table. To add dialogue for a mod character, write keys under
+`THE_ARCHITECT.talk.<CHARACTER_ENTRY>.*`:
+
+```json
+{
+  "THE_ARCHITECT.talk.MY_MOD_CHARACTER_SEER.0-0.char": "The exit is yours, but the cost is mine.",
+  "THE_ARCHITECT.talk.MY_MOD_CHARACTER_SEER.0-1.ancient": "Then pay precisely.",
+  "THE_ARCHITECT.talk.MY_MOD_CHARACTER_SEER.0-attack": "Both"
+}
+```
+
+For Architect dialogue, optional `-attack` values are `None`, `Player`, `Architect`, or `Both`. Optional `-visit` keys
+can override the visit index:
+
+```json
+{
+  "THE_ARCHITECT.talk.MY_MOD_CHARACTER_SEER.1-visit": "3"
+}
+```
+
+Use `.sfx` beside a line key when a line should play a specific FMOD event:
+
+```json
+{
+  "MY_MOD_ANCIENT_MIRROR.talk.ANY.0-0r.ancient.sfx": "event:/sfx/ui/enchant_simple"
+}
+```
+
+## Keywords
+
+Prefer owned keyword ids. Attribute style:
+
+```csharp
+[RegisterOwnedCardKeyword(
+    "bleeding",
+    IconPath = "res://MyMod/images/keywords/bleeding.png")]
+public sealed class MyKeywordRegistrations
+{
+}
+```
+
+Content pack style:
+
+```csharp
+RitsuLibFramework.CreateContentPack("MyMod")
+    .CardKeywordOwnedByLocNamespace(
+        localKeywordStem: "bleeding",
+        iconPath: "res://MyMod/images/keywords/bleeding.png")
+    .Apply();
+```
+
+Both create:
+
+```text
+MY_MOD_KEYWORD_BLEEDING
+```
+
+Card keyword text goes in `card_keywords`:
+
+```json
+{
+  "MY_MOD_KEYWORD_BLEEDING.title": "Bleeding",
+  "MY_MOD_KEYWORD_BLEEDING.description": "Loses HP at the end of turn."
+}
+```
+
+Use the keyword on a `ModCardTemplate`:
+
+```csharp
+protected override IEnumerable<string> RegisteredKeywordIds =>
+[
+    "MY_MOD_KEYWORD_BLEEDING"
+];
+```
+
+At runtime:
+
+```csharp
+card.AddModKeyword("MY_MOD_KEYWORD_BLEEDING");
+if (card.HasModKeyword("MY_MOD_KEYWORD_BLEEDING"))
 {
     // ...
 }
 ```
 
-This is useful when keyword presence is driven by runtime state rather than static card text.
+Relic, potion, and power template keyword lists are display-only hover tips. Implement gameplay behavior in the model
+logic.
 
----
+## I18N
 
-## Ancient Dialogue Localization
+Create an `I18N` instance when you want simple key-value JSON files outside the game's model tables.
 
-RitsuLib includes `AncientDialogueLocalization`. It serves two roles:
+```csharp
+var i18n = RitsuLibFramework.CreateModLocalization(
+    modId: "MyMod",
+    instanceName: "settings",
+    pckFolders: ["res://MyMod/localization/settings"]);
 
-- helper API for scanning dialogue from localization keys
-- automatic append of localization-defined mod-character ancient dialogues before `AncientDialogueSet.PopulateLocKeys` runs
+var label = i18n.Get("settings.enabled", "Enabled");
+```
 
-The key format matches the base game:
+Example `eng.json`:
 
-| Key component | Description |
-|---|---|
-| `<ancientEntry>.talk.<characterEntry>.<dialogueIndex>-<lineIndex>.ancient` | Ancient line |
-| `<ancientEntry>.talk.<characterEntry>.<dialogueIndex>-<lineIndex>.char` | Character line |
-| Optional suffix `r` | Repeated dialogue |
-| Optional suffix `.sfx` | Sound effect |
-| Optional suffix `-visit` | Visit override |
-| Optional suffix `-attack` | Architect-only attacker override |
+```json
+{
+  "settings.enabled": "Enabled"
+}
+```
 
-Authors only need to write localization entries to add ancient dialogue for custom characters, without manually patching each `AncientDialogueSet`.
+When an API requires `LocString`, register the instance as a virtual table:
 
-If **no** keys exist for an ancient, vanilla may still show `PROCEED` for `THE_ARCHITECT` while `WinRun` assumes `Dialogue` is non-null. RitsuLib adds a narrow compatibility fallback (empty `Lines`, safe attackers) for `ModContentRegistry` characters **only** when the debug compatibility master toggle and the **THE_ARCHITECT missing dialogue** toggle are enabled, with a one-time `[Ancient]` warning.
+```csharp
+var loc = RitsuLibFramework.CreateModLocalization("MyMod", "ui");
+RitsuLibFramework.RegisterI18NLocTableBridge("MyMod", loc);
 
----
+var tableId = RitsuLibFramework.GetI18NLocTableId("MyMod");
+var title = new LocString(tableId, "settings.enabled");
+```
 
-## Recommended Split
-
-| Use case | Tool |
-|---|---|
-| Game model text (titles, descriptions) | Base game `LocString` tables |
-| Mod-owned auxiliary text (settings, explanations) | `I18N` |
-| Reusable keyword definitions | `ModKeywordRegistry` |
-| Ancient dialogue | Localization keys + `AncientDialogueLocalization` |
-
----
-
-## Related Documents
-
-- [Content Authoring Toolkit](ContentAuthoringToolkit.md)
-- [Character & Unlock Templates](CharacterAndUnlockScaffolding.md)
-- [Diagnostics & Compatibility](DiagnosticsAndCompatibility.md)
-- [LocString Placeholder Resolution](LocStringPlaceholderResolution.md)
-- [Mod Settings UI](ModSettings.md)
+Pass a custom stem to `RegisterI18NLocTableBridge(...)` and `GetI18NLocTableId(...)` when you need multiple virtual
+tables.

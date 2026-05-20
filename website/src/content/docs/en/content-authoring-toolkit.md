@@ -1,156 +1,189 @@
 ---
-title: "Content Authoring Toolkit"
+title: "Content Authoring"
 ---
 
-This document is the overview for content authoring: registration entry points, model identity, localization coupling, and asset override basics.
+## Choose A Registration Style
 
-Detailed registration mechanics live in [Content Packs & Registries](../content-packs-and-registries/). Detailed asset semantics live in [Asset Profiles & Fallbacks](../asset-profiles-and-fallbacks/).
+RitsuLib offers two normal registration styles. Treat them as peers:
 
----
+| Style | Best fit |
+| --- | --- |
+| CLR attributes | Content classes owned by your mod. The registration sits next to the model class. |
+| Content pack | Generated content, conditional setup, placeholders, or a reviewable list in one initializer. |
 
-## Registration APIs
+Attribute registration requires the mod assembly to be registered once:
 
-| API | Purpose |
-|---|---|
-| `RitsuLibFramework.CreateContentPack(modId)` | Recommended entry point — fluent builder |
-| `RitsuLibFramework.GetContentRegistry(modId)` | Low-level content registry |
-| `RitsuLibFramework.GetKeywordRegistry(modId)` | Keyword registry |
-| `RitsuLibFramework.GetTimelineRegistry(modId)` | Timeline (story / epoch) registry |
-| `RitsuLibFramework.GetUnlockRegistry(modId)` | Unlock rule registry |
+```csharp
+ModTypeDiscoveryHub.RegisterModAssembly("MyMod", Assembly.GetExecutingAssembly());
+```
 
-`CreateContentPack` wraps all of the above in a fluent builder that executes registered steps in insertion order when `Apply()` is called.
+If the annotated class lives in a helper assembly that the game does not map to your manifest id, add
+`[RitsuLibOwnedBy("MyMod")]` to the class or register that assembly with `ModTypeDiscoveryHub.RegisterModAssembly(...)`.
 
-This document keeps the overview short. For builder surface, manifests, fixed-entry ownership, and freeze behavior, see [Content Packs & Registries](../content-packs-and-registries/).
+## Attribute Registration
 
----
+Put the attribute on the concrete model type. Abstract classes are skipped.
 
-## Content Pack Builder
+```csharp
+[RegisterCard(typeof(MyCardPool))]
+public sealed class MyStrike
+    : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
 
-All builder methods are chainable. A representative example:
+[RegisterRelic(typeof(MyRelicPool))]
+public sealed class MyStarterRelic : ModRelicTemplate
+{
+}
+
+[RegisterCharacter]
+public sealed class MyCharacter
+    : ModCharacterTemplate<MyCardPool, MyRelicPool, MyPotionPool>
+{
+}
+```
+
+Pool-backed model attributes support stable entry overrides:
+
+```csharp
+[RegisterCard(typeof(MyCardPool), StableEntryStem = "my_strike")]
+public sealed class RenamedStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
+```
+
+Use `FullPublicEntry` only for compatibility with an already published full entry. Do not set `StableEntryStem` and
+`FullPublicEntry` together.
+
+Common content attributes:
+
+| Attribute | Registers |
+| --- | --- |
+| `RegisterCard(typeof(pool))` | Card in a card pool |
+| `RegisterRelic(typeof(pool))` | Relic in a relic pool |
+| `RegisterPotion(typeof(pool))` | Potion in a potion pool |
+| `RegisterCharacter` | Character model |
+| `RegisterPower`, `RegisterOrb` | Combat models |
+| `RegisterAct`, `RegisterMonster`, `RegisterGlobalEncounter` | Act, monster, global encounter |
+| `RegisterActEncounter(typeof(act))` | Encounter for an act |
+| `RegisterSharedEvent`, `RegisterActEvent(typeof(act))` | Event content |
+| `RegisterSharedAncient`, `RegisterActAncient(typeof(act))` | Ancient event content |
+| `RegisterAchievement`, `RegisterEnchantment`, `RegisterAffliction` | Metadata or card-state models |
+| `RegisterGoodModifier`, `RegisterBadModifier` | Daily modifiers |
+| `RegisterSharedCardPool`, `RegisterSharedRelicPool`, `RegisterSharedPotionPool` | Shared pools |
+
+Every auto-registration attribute has `Order`. Lower values run earlier within the same phase. For starter cards, relics,
+and potions, the same `Order` is also stored on the starter entry; starter lists are resolved by `Order`, then by
+registration order.
+
+Starter example:
+
+```csharp
+[RegisterCard(typeof(MyCardPool))]
+[RegisterCharacterStarterCard(typeof(MyCharacter), 4, Order = 10)]
+public sealed class MyStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
+```
+
+Use abstract base class attributes only with `Inherit = true`. The base class itself is not registered; each concrete
+derived type receives the inherited registration unless it declares an equivalent direct attribute.
+
+```csharp
+[RegisterCard(typeof(MyCardPool), Inherit = true)]
+public abstract class MySkillCardBase
+    : ModCardTemplate(1, CardType.Skill, CardRarity.Common, TargetType.Self)
+{
+}
+
+public sealed class MyBlock : MySkillCardBase
+{
+}
+```
+
+Do not put `StableEntryStem` or `FullPublicEntry` on an inherited base attribute unless every derived type is intended to
+share the same public entry. That is almost always wrong. Put stable entry overrides on the concrete class instead.
+
+## Content Packs
+
+Use a content pack when a batch is more readable than scattered attributes.
 
 ```csharp
 RitsuLibFramework.CreateContentPack("MyMod")
-    .Character<MyCharacter>()
-    .Card<MyCardPool, MyCard>()
-    .Relic<MyRelicPool, MyRelic>()
-    .CardKeywordOwnedByLocNamespace("my_keyword", iconPath: "res://MyMod/art/kw.png")
-    .Story<MyStory>()
-    .Epoch<MyEpoch>()
-    .RequireEpoch<MyCard, MyEpoch>()
-    .Custom(ctx => { /* ... */ })
+    .Card<MyCardPool, MyStrike>()
+    .Relic<MyRelicPool, MyStarterRelic>()
+    .Potion<MyPotionPool, MyPotion>()
+    .Power<MyPower>()
+    .ActEvent<MyAct, MyEvent>()
+    .CardKeywordOwnedByLocNamespace("bleeding")
     .Apply();
 ```
 
-`Apply()` returns `ModContentPackContext` for further access to individual registries.
+Important pack methods:
 
----
+| Area | Methods |
+| --- | --- |
+| Pool content | `.Card<TPool,TCard>()`, `.Relic<TPool,TRelic>()`, `.Potion<TPool,TPotion>()` |
+| Stable entries | overloads taking `ModelPublicEntryOptions.FromStem(...)` or `FromFullPublicEntry(...)` |
+| Placeholders | `.PlaceholderCard<TPool>(stem)`, `.PlaceholderRelic<TPool>(stem)`, `.PlaceholderPotion<TPool>(stem)` |
+| Characters | `.Character<T>()`, `.Character<T>(entry => ...)`, `.CharacterStarterCard<TCharacter,TCard>()`, starter relic / potion helpers |
+| World content | `.Act<T>()`, `.Monster<T>()`, `.ActEncounter<TAct,TEncounter>()`, `.SharedEvent<T>()`, `.ActEvent<TAct,TEvent>()` |
+| Ancients | `.SharedAncient<T>()`, `.ActAncient<TAct,TAncient>()`, `.AncientOption<TAncient>(rule)` |
+| Keywords and ids | `.CardKeywordOwnedByLocNamespace(...)`, `.KeywordOwned(...)`, `.CardTagOwned(...)` |
+| UI | `.CardPileOwned(...)`, `.TopBarButtonOwned(...)` |
+| Timeline and unlocks | `.Story<T>()`, `.Epoch<T>()`, `.StoryEpoch<TStory,TEpoch>()`, `.RequireEpoch<TModel,TEpoch>()`, unlock helpers |
+| Batch input | `.ContentManifest(...)`, `.KeywordManifest(...)`, `.PackManifest(...)`, `.Manifest(...)` |
+| Custom logic | `.Custom(ctx => ...)` |
 
-## Model ID Rule
+Do not register the same model through attributes and a content pack unless you intentionally want idempotent duplicate
+handling. Pick one source of truth for each content family.
 
-For any model registered through the RitsuLib content registry, `ModelId.Entry` uses:
+## Model Templates
 
-```
+Templates are optional base classes that provide RitsuLib conventions and hooks:
+
+| Model | Template |
+| --- | --- |
+| Card | `ModCardTemplate` |
+| Relic | `ModRelicTemplate` |
+| Potion | `ModPotionTemplate` |
+| Power | `ModPowerTemplate` |
+| Character | `ModCharacterTemplate<TCardPool, TRelicPool, TPotionPool>` |
+| Event | `ModEventTemplate` |
+| Ancient event | `ModAncientEventTemplate` |
+| Encounter / monster / act | `ModEncounterTemplate`, `ModMonsterTemplate`, `ModActTemplate` |
+| Story / epoch | `ModStoryTemplate`, `ModEpochTemplate` |
+
+Most display text still belongs in localization JSON. Do not add fake `Title` or `Description` overrides to models whose
+base game class already reads `LocString` from its table.
+
+## Entry Ids
+
+RitsuLib-owned pool content gets a fixed public entry:
+
+```text
 <MODID>_<CATEGORY>_<TYPENAME>
 ```
 
-All segments are normalized to **UPPER_SNAKE_CASE**.
+`MyMod` + card + `MyStrike` becomes:
 
-### Examples (Mod id `MyMod`)
-
-| C# Type | Category | ModelId.Entry |
-|---|---|---|
-| `MyStrike` | card | `MY_MOD_CARD_MY_STRIKE` |
-| `MyStarterRelic` | relic | `MY_MOD_RELIC_MY_STARTER_RELIC` |
-| `MyCharacter` | character | `MY_MOD_CHARACTER_MY_CHARACTER` |
-
-> If two types under the same mod id and category share the same CLR name, they resolve to the same entry and must be renamed.
-
----
-
-## Localization Rule
-
-Localization keys are written directly against the fixed `ModelId.Entry`:
-
-```json
-{
-  "MY_MOD_CARD_MY_STRIKE.title": "My Strike",
-  "MY_MOD_CARD_MY_STRIKE.description": "Deal {damage} damage.",
-  "MY_MOD_RELIC_MY_STARTER_RELIC.title": "My Starter Relic"
-}
+```text
+MY_MOD_CARD_MY_STRIKE
 ```
 
-`RitsuLibFramework.CreateModLocalization(...)` operates independently from the game's `LocString` pipeline.
+The entry is used by saves, model ids, localization keys, asset defaults, unlock rules, and cross-mod references. Treat it
+as stable after release.
 
----
-
-## Asset Override Rule
-
-RitsuLib applies template-based asset overrides via interface matching at render time.
-
-### Card Overrides
-
-Inherit `ModCardTemplate` and override via `AssetProfile` (recommended) or individual properties:
+Use `StableEntryStem` / `ModelPublicEntryOptions.FromStem(...)` when a type was renamed but the published entry must stay
+the same:
 
 ```csharp
-public class MyCard : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+[RegisterCard(typeof(MyCardPool), StableEntryStem = "my_strike")]
+public sealed class RenamedStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
 {
-    // Unified profile (recommended)
-    public override CardAssetProfile AssetProfile => new()
-    {
-        PortraitPath      = "res://MyMod/art/my_card.png",
-        FramePath         = "res://MyMod/art/frame.png",
-        FrameMaterialPath = "res://MyMod/art/frame.material",
-    };
-
-    // Or override a single property directly
-    public override string? CustomPortraitPath => "res://MyMod/art/my_card.png";
 }
 ```
 
-Supported card fields include portrait, frame, portrait border, energy icon, overlay, and banner-related assets.
-
-### Other Content
-
-| Content type | Supported override fields |
-|---|---|
-| Relic | icon, icon outline, big icon |
-| Power | icon, big icon |
-| Orb | icon, visuals scene |
-| Potion | image, outline |
-
-Override behavior:
-1. The model must implement the matching override interface (directly or via `Mod*Template`)
-2. The override member must return a non-empty path
-3. If the resource path does not exist, RitsuLib emits a one-time warning and falls back to the base asset
-
-This warning behavior is especially important for character assets because the base game has almost no safe fallback for missing paths.
-
-For the full profile records, helper factories, placeholder behavior, and diagnostics policy, see [Asset Profiles & Fallbacks](../asset-profiles-and-fallbacks/).
-
----
-
-## Registration Timing
-
-All content registration must be completed before the framework freezes content registration (during early game boot). Additional registration after the freeze is invalid and may throw.
-
-The freeze is signaled by `ContentRegistrationClosedEvent`.
-
----
-
-## Compatibility
-
-The fixed-entry rule applies only to model types explicitly registered through the RitsuLib content registry, at `ModelDb.GetEntry(Type)`. Models not registered through RitsuLib are unaffected.
-
----
-
-## Related Documents
-
-- [Getting Started](../getting-started/)
-- [Content Packs & Registries](../content-packs-and-registries/)
-- [Character & Unlock Templates](../character-and-unlock-scaffolding/)
-- [Custom Events](../custom-events/)
-- [Card Dynamic Variables](../card-dynamic-var-toolkit/)
-- [Localization & Keywords](../localization-and-keywords/)
-- [Framework Design](../framework-design/)
-- [Asset Profiles & Fallbacks](../asset-profiles-and-fallbacks/)
+Avoid all-uppercase CLR type names such as `TESTCARD`. Vanilla entry parsing can split those names incorrectly; in current
+0.105.x behavior, `TESTCARD` can become `T_ES_TC_AR_D`. Prefer `TestCard`, and prefer `UrlParser` over `URLParser`.
 

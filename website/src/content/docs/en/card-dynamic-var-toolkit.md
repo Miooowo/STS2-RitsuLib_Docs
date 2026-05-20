@@ -1,137 +1,71 @@
 ---
-title: "Card Dynamic Var Toolkit"
+title: "Card Dynamic Variables"
 ---
 
-This document describes how RitsuLib creates card dynamic variables, how tooltip binding works, and how values are injected when a card is hovered.
+## Add A Variable
 
----
-
-## Vanilla DynamicVar System
-
-> The following describes the game engine’s own dynamic variable system. RitsuLib builds convenience constructors on top of it.
-
-The game’s `DynamicVar` system lets cards carry values that can change at runtime. Each `DynamicVar` subclass may carry extra metadata for formatters (for example `DamageVar` for highlighting, `EnergyVar` for colors). For the full list of subclasses, see [LocString Placeholder Resolution](../loc-string-placeholder-resolution/).
-
----
-
-## RitsuLib Capabilities
-
-On top of the vanilla system, RitsuLib provides:
-
-- **`ModCardVars`** — convenient variable constructors
-- **`DynamicVarExtensions`** — each variable can bind its own tooltip independently
-- **Automatic injection** — on card hover, all bound tooltips are appended automatically (implemented via patches; no extra setup)
-
----
-
-## Variable Construction
-
-Create variables with `ModCardVars` and add them to the card’s `DynamicVarSet`:
+Use `ModCardVars` when a card needs values in its description that can change at runtime.
 
 ```csharp
-public class MyCard : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+using MegaCrit.Sts2.Core.Localization.DynamicVars;
+using STS2RitsuLib.Cards.DynamicVars;
+
+public sealed class MyStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
 {
-    private static readonly DynamicVar _charges =
-        ModCardVars.Int("charges", amount: 3)
-            .WithSharedTooltip("my_mod_charges");
-
-    private static readonly DynamicVar _label =
-        ModCardVars.String("flavor", value: "wine");
-
-    public override DynamicVarSet CreateDynamicVars() =>
-        new DynamicVarSet().Add(_charges).Add(_label);
+    public override DynamicVarSet DynamicVars => new()
+    {
+        ModCardVars.Int("damage", Damage),
+        ModCardVars.Computed("block", 3, card => card?.Upgraded == true ? 5 : 3),
+    };
 }
 ```
 
-| Method | Description |
-|---|---|
-| `ModCardVars.Int(name, amount)` | Creates a numeric variable (`decimal`) |
-| `ModCardVars.String(name, value)` | Creates a string variable |
-| `ModCardVars.Computed(...)` | Creates a computed variable |
+Then use those variable names in `cards.json`, for example `Deal {damage} damage. Gain {block} block.`
 
-RitsuLib does not assign gameplay semantics to these variables. Their meaning is entirely defined by the content author.
+Use a normal `IntVar` for values that already live on the card. Use `ComputedDynamicVar` when the display value depends on target, upgrade state, or preview mode.
 
----
+## Add A Tooltip
 
-## Tooltip Binding
-
-Bind tooltips at definition time via chained extension methods:
-
-### Shared tooltip (recommended)
-
-Reads keys from the `static_hover_tips` table:
+Attach hover tips directly to a dynamic variable.
 
 ```csharp
-var myVar = ModCardVars.Int("my_var", 2)
-    .WithSharedTooltip("my_mod_my_var");
-// Resolves:
-//   static_hover_tips["my_mod_my_var.title"]
-//   static_hover_tips["my_mod_my_var.description"]
+ModCardVars.Int("heat", Heat)
+    .WithSharedTooltip("MY_MOD_HEAT", "res://MyMod/images/ui/heat.png");
 ```
 
-### Explicit table / key
-
-```csharp
-var myVar = ModCardVars.Int("my_var", 2)
-    .WithTooltip(
-        titleTable: "card_keywords",
-        titleKey:   "my_mod_my_var.title",
-        iconPath:   "res://MyMod/art/kw.png");
-```
-
-### Custom factory
-
-```csharp
-var myVar = ModCardVars.Int("my_var", 2)
-    .WithTooltip(var => new HoverTip(
-        new LocString("my_table", "my_var.title"),
-        new LocString("my_table", "my_var.description")));
-```
-
----
-
-## Localization Example
-
-When using `WithSharedTooltip("my_mod_charges")`, provide entries in your `static_hover_tips` localization file:
+This reads `static_hover_tips` keys:
 
 ```json
 {
-  "my_mod_charges.title": "Charges",
-  "my_mod_charges.description": "Accumulated charges that deal extra damage."
+  "MY_MOD_HEAT.title": "Heat",
+  "MY_MOD_HEAT.description": "Some cards care about the current Heat value."
 }
 ```
 
-RitsuLib does not ship built-in localization entries for these; if you use `WithSharedTooltip`, you must supply the strings yourself.
+For custom layouts, pass a factory to `.WithTooltip(var => new HoverTip(...))`.
 
----
+## Read Values Safely
 
-## Card Hover Injection
-
-RitsuLib’s patches automatically append every dynamic variable in `CardModel.DynamicVars` that has a bound tooltip to the end of the hover-tip sequence. No extra configuration is required.
-
----
-
-## Clone Behavior
-
-When `DynamicVar.Clone()` runs, tooltip metadata bound on the source variable is copied to the clone. Upgraded or duplicated cards in combat therefore behave correctly without extra handling.
-
----
-
-## Reading Variable Values at Runtime
-
-Read values through `DynamicVarExtensions`:
+Use extension helpers when a card or effect reads dynamic variables from another card:
 
 ```csharp
-int charges = card.DynamicVars.GetIntOrDefault("charges");
-decimal val = card.DynamicVars.GetValueOrDefault("charges");
-bool active = card.DynamicVars.HasPositiveValue("charges");
+var amount = card.DynamicVars.GetIntOrDefault("damage");
+var hasHeat = card.DynamicVars.HasPositiveValue("heat");
 ```
 
----
+The helpers return defaults when the key is missing, which is usually better than assuming every card has your variable.
 
-## Related Documents
+## Preview Logic
 
-- [Content Authoring Toolkit](../content-authoring-toolkit/)
-- [Getting Started](../getting-started/)
-- [LocString Placeholder Resolution](../loc-string-placeholder-resolution/)
+`ComputedDynamicVar` accepts a preview factory:
+
+```csharp
+ModCardVars.Computed(
+    "damage",
+    Damage,
+    (card, target) => ResolveDamage(card, target),
+    (card, mode, target, runGlobalHooks) => ResolvePreviewDamage(card, mode, target));
+```
+
+Use preview logic when card preview, target preview, or upgrade preview should show a value different from the current live card value.
 

@@ -133,6 +133,8 @@ export default defineConfig({
 						{ ...lb('持久化设计', 'Persistence'), slug: 'persistence-guide' },
 						{ ...lb('补丁系统', 'Patching'), slug: 'patching-guide' },
 						{ ...lb('Mod 设置界面', 'Mod settings UI'), slug: 'mod-settings' },
+						{ ...lb('Shell 主题', 'Shell theme'), slug: 'shell-theme' },
+						{ ...lb('遥测后端', 'Telemetry backend'), slug: 'telemetry-backend' },
 					],
 				},
 				{

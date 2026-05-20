@@ -1,216 +1,66 @@
 ---
-title: "Patching Guide"
+title: "Patching"
 ---
 
-RitsuLib uses Harmony underneath, but wraps it in a patching layer that standardizes declaration shape, registration, and failure handling.
+## Create A Patcher
 
----
-
-## Main Types
-
-| Type | Purpose |
-|---|---|
-| `RitsuLibFramework.CreatePatcher(...)` | Create a `ModPatcher` instance |
-| `ModPatcher` | Register and apply patches |
-| `IPatchMethod` | Static patch declaration contract |
-| `IModPatches` | Group multiple patch registrations together |
-| `DynamicPatchBuilder` | Build patches from runtime-discovered methods |
-
----
-
-## The Normal Workflow
+Use one patcher per logical area. Apply required patchers through `ApplyRequiredPatcher` so the mod can disable itself on critical failure.
 
 ```csharp
-var patcher = RitsuLibFramework.CreatePatcher("MyMod", "core-patches");
-patcher.RegisterPatch<MySinglePatch>();
-patcher.RegisterPatches<MyPatchSet>();
-
-if (!patcher.PatchAll())
-    throw new InvalidOperationException("Required patches failed.");
+var patcher = RitsuLibFramework.CreatePatcher("MyMod", "combat");
+patcher.RegisterPatches<MyCombatPatch>();
+RitsuLibFramework.ApplyRequiredPatcher(patcher, DisableMod);
 ```
 
-Recommended pattern:
+Use separate patchers when one optional feature can fail without disabling the whole mod.
 
-- create one patcher per logical patch area
-- register all patches first
-- call `PatchAll()` once
-- treat a `false` return as a startup failure for that patcher
+## Write Patch Classes
 
----
-
-## Writing A Single Patch With `IPatchMethod`
-
-`IPatchMethod` is the most common patch shape.
+Implement `IPatchMethod` for strongly typed target declarations.
 
 ```csharp
-using STS2RitsuLib.Patching.Models;
-
-public class ExamplePatch : IPatchMethod
+public sealed class MyCombatPatch : IPatchMethod
 {
-    public static string PatchId => "example_patch";
-    public static string Description => "Log when the method runs";
-    public static bool IsCritical => false;
+    public static string PatchId => "my_mod_combat_patch";
+    public static string Description => "Adjust combat start behavior";
+    public static bool IsCritical => true;
 
-    public static ModPatchTarget[] GetTargets()
-    {
-        return [new(typeof(SomeType), nameof(SomeType.SomeMethod))];
-    }
+    public static ModPatchTarget[] GetTargets() =>
+    [
+        new(typeof(CombatRoom), "OnEnter"),
+    ];
 
-    public static void Prefix()
+    public static void Postfix(CombatRoom __instance)
     {
-        // Harmony prefix
+        // Harmony postfix body.
     }
 }
 ```
 
-Important points:
-
-- `PatchId` must be unique within the patcher
-- `GetTargets()` can return one or many targets
-- `Prefix`, `Postfix`, `Transpiler`, and `Finalizer` are discovered by name
-- if none of those methods exist, patch application fails
-
----
-
-## Grouping Patches With `IModPatches`
-
-When you want one type to register several patches, implement `IModPatches`:
-
-```csharp
-using STS2RitsuLib.Patching.Core;
-using STS2RitsuLib.Patching.Models;
-
-public class MyPatchSet : IModPatches
-{
-    public static void AddTo(ModPatcher patcher)
-    {
-        patcher.RegisterPatch<ExamplePatch>();
-        patcher.RegisterPatch<AnotherPatch>();
-    }
-}
-```
-
-Then register the group with:
-
-```csharp
-patcher.RegisterPatches<MyPatchSet>();
-```
-
-This is the preferred replacement for older "apply this patch bundle object" examples.
-
----
-
-## Critical vs Optional Patches
-
-Each `IPatchMethod` can declare `IsCritical`.
-
-- `true`: failure causes `PatchAll()` to fail and the patcher rolls back
-- `false`: failure is logged, but the patcher may still succeed overall
-
-Use `IsCritical = true` when the mod cannot safely run without the patch.
-Use `false` for cosmetic features, optional compatibility hooks, or best-effort enhancements.
-
----
-
-## Ignore Missing Targets
-
-`ModPatchTarget` supports an `ignoreIfMissing` flag:
-
-```csharp
-public static ModPatchTarget[] GetTargets()
-{
-    return [new(typeof(SomeType), "SomeOptionalMethod", ignoreIfMissing: true)];
-}
-```
-
-Use this when:
-
-- a target only exists on some game versions
-- a compatibility target may not be present
-- the patch is optional by design
-
-This differs from `IsCritical = false`:
-
-- `ignoreIfMissing` means "missing target is expected and not an error"
-- `IsCritical = false` means "target exists, but patch failure should not abort the patcher"
-
----
-
-## Multiple Targets In One Patch
-
-One `IPatchMethod` can patch several methods that share the same Harmony logic.
-
-RitsuLib automatically expands `GetTargets()` into multiple `ModPatchInfo` entries.
-If there is more than one target, the framework appends the target name to the generated patch id.
-
-That lets you keep related logic together without manually duplicating patch classes.
-
----
+Use `new ModPatchTarget(type, methodName, parameterTypes)` when overloads need disambiguation. Use `ignoreIfMissing: true` only for optional compatibility targets.
 
 ## Dynamic Patches
 
-Use `DynamicPatchBuilder` when targets are discovered at runtime.
+Use dynamic patches when the target method is discovered at runtime.
 
 ```csharp
-using HarmonyLib;
-using STS2RitsuLib.Patching.Builders;
+patcher.RegisterDynamicPatch(new DynamicPatchInfo(
+    id: "my_mod_dynamic_target",
+    originalMethod: resolvedMethod,
+    patchType: typeof(MyDynamicPatch),
+    isCritical: false,
+    description: "Optional runtime target"));
 
-var builder = new DynamicPatchBuilder("my_dynamic")
-    .AddMethod(
-        targetType: typeof(SomeType),
-        methodName: "SomeMethod",
-        postfix: DynamicPatchBuilder.FromMethod(typeof(MyRuntimePatch), nameof(MyRuntimePatch.Postfix)),
-        isCritical: false,
-        description: "Runtime-discovered patch");
-
-patcher.ApplyDynamic(builder, rollbackOnCriticalFailure: false);
+patcher.PatchAll();
 ```
 
-Use dynamic patches when static `GetTargets()` is not practical, for example:
+For ordinary game methods, static `IPatchMethod` classes are easier to read and review.
 
-- patching generated runtime types
-- patching property getters selected from reflection scans
-- patching a variable set of discovered methods
+## Release Checklist
 
----
-
-## Logging And Patch Boundaries
-
-`CreatePatcher(ownerModId, patcherName, patcherLabel)` gives each patcher:
-
-- a stable Harmony id: `<ownerModId>.<patcherName>`
-- its own logger prefix
-- independent registration and application lifecycle
-
-Splitting patchers by feature area is usually worth it because logs stay easier to read.
-
----
-
-## Suggested Structure
-
-For medium or large mods, this layout works well:
-
-- one patch namespace per feature area
-- one `IModPatches` type per feature area
-- small `IPatchMethod` classes with one clear purpose each
-- optional compatibility patches marked `IsCritical = false`
-
-This matches how RitsuLib itself organizes its internal framework patchers.
-
----
-
-## Common Mistakes
-
-- calling `PatchAll()` before registering all patches
-- marking compatibility patches as critical without a real need
-- using `IsCritical = false` when `ignoreIfMissing` is the real intent
-- writing an `IPatchMethod` with no `Prefix` / `Postfix` / `Transpiler` / `Finalizer`
-- keeping all unrelated patches in one giant patcher with unreadable logs
-
----
-
-## Related Documents
-
-- [Getting Started](../getting-started/)
-- [Framework Design](../framework-design/)
+- Give every patch a stable `PatchId`.
+- Set `IsCritical = false` for compatibility patches that can safely be skipped.
+- Add `parameterTypes` for overloaded targets.
+- Use `HarmonyVerifiedIl` or tests for fragile transpilers.
+- Prefer lifecycle events and registries when they cover the use case.
 

@@ -1,153 +1,178 @@
-# 内容注册规则
+# 内容编写
 
-本文是内容编写的总览文档，聚焦注册入口、模型身份、本地化耦合关系以及资源覆写基础规则。
+## 选择注册风格
 
-更详细的注册机制见 [内容包与注册器](ContentPacksAndRegistries.md)，更详细的资源语义见 [资源配置与回退规则](AssetProfilesAndFallbacks.md)。
+RitsuLib 提供两种常规注册风格，它们是平级入口：
 
----
+| 风格 | 适用场景 |
+| --- | --- |
+| CLR 注解 | Mod 自己拥有的内容类。注册点贴近模型类。 |
+| Content pack | 生成内容、条件注册、占位内容，或希望在初始化入口集中审查的一批注册。 |
 
-## 注册接口
+注解注册需要先注册 Mod 程序集：
 
-| 接口 | 说明 |
-|---|---|
-| `RitsuLibFramework.CreateContentPack(modId)` | 推荐入口：流式内容包构建器 |
-| `RitsuLibFramework.GetContentRegistry(modId)` | 底层内容注册器 |
-| `RitsuLibFramework.GetKeywordRegistry(modId)` | 关键词注册器 |
-| `RitsuLibFramework.GetTimelineRegistry(modId)` | Timeline（故事/纪元）注册器 |
-| `RitsuLibFramework.GetUnlockRegistry(modId)` | 解锁规则注册器 |
+```csharp
+ModTypeDiscoveryHub.RegisterModAssembly("MyMod", Assembly.GetExecutingAssembly());
+```
 
-`CreateContentPack` 是推荐用法，将以上注册器封装为流式 API，调用 `Apply()` 时按添加顺序依次执行。
+如果注解类位于游戏无法映射到你的 manifest id 的辅助程序集，可以给类加 `[RitsuLibOwnedBy("MyMod")]`，或为该程序集调用
+`ModTypeDiscoveryHub.RegisterModAssembly(...)`。
 
-本文只保留总览层内容。关于构建器完整表面、清单式注册、固定条目标识归属和冻结机制，请阅读 [内容包与注册器](ContentPacksAndRegistries.md)。
+## 注解式注册
 
----
+把注解放在具体模型类型上。抽象类会被跳过。
 
-## 内容包构建器
+```csharp
+[RegisterCard(typeof(MyCardPool))]
+public sealed class MyStrike
+    : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
 
-所有方法都支持链式调用，下面给出一个代表性示例：
+[RegisterRelic(typeof(MyRelicPool))]
+public sealed class MyStarterRelic : ModRelicTemplate
+{
+}
+
+[RegisterCharacter]
+public sealed class MyCharacter
+    : ModCharacterTemplate<MyCardPool, MyRelicPool, MyPotionPool>
+{
+}
+```
+
+带池的模型注解支持稳定 Entry 覆写：
+
+```csharp
+[RegisterCard(typeof(MyCardPool), StableEntryStem = "my_strike")]
+public sealed class RenamedStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
+```
+
+`FullPublicEntry` 只用于兼容已经发布过的完整 Entry。不要同时设置 `StableEntryStem` 和 `FullPublicEntry`。
+
+常用内容注解：
+
+| 注解 | 注册内容 |
+| --- | --- |
+| `RegisterCard(typeof(pool))` | 卡牌进入卡池 |
+| `RegisterRelic(typeof(pool))` | 遗物进入遗物池 |
+| `RegisterPotion(typeof(pool))` | 药水进入药水池 |
+| `RegisterCharacter` | 角色模型 |
+| `RegisterPower`, `RegisterOrb` | 战斗模型 |
+| `RegisterAct`, `RegisterMonster`, `RegisterGlobalEncounter` | Act、怪物、全局遭遇 |
+| `RegisterActEncounter(typeof(act))` | 指定 Act 的遭遇 |
+| `RegisterSharedEvent`, `RegisterActEvent(typeof(act))` | 事件 |
+| `RegisterSharedAncient`, `RegisterActAncient(typeof(act))` | Ancient 事件 |
+| `RegisterAchievement`, `RegisterEnchantment`, `RegisterAffliction` | 元数据或卡牌状态模型 |
+| `RegisterGoodModifier`, `RegisterBadModifier` | Daily modifier |
+| `RegisterSharedCardPool`, `RegisterSharedRelicPool`, `RegisterSharedPotionPool` | 共享池 |
+
+所有自动注册注解都有 `Order`。同一注册阶段内，值越小越早执行。对于初始卡牌、初始遗物和初始药水，同一个 `Order` 也会写入 starter 条目；最终 starter 列表按
+`Order` 排序，再按注册顺序排列。
+
+Starter 示例：
+
+```csharp
+[RegisterCard(typeof(MyCardPool))]
+[RegisterCharacterStarterCard(typeof(MyCharacter), 4, Order = 10)]
+public sealed class MyStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+{
+}
+```
+
+抽象基类上的注册注解只有设置 `Inherit = true` 才会传给具体派生类。抽象基类本身不会被注册；每个具体派生类会获得继承来的注册，除非它声明了等价的直接注解。
+
+```csharp
+[RegisterCard(typeof(MyCardPool), Inherit = true)]
+public abstract class MySkillCardBase
+    : ModCardTemplate(1, CardType.Skill, CardRarity.Common, TargetType.Self)
+{
+}
+
+public sealed class MyBlock : MySkillCardBase
+{
+}
+```
+
+不要在继承型基类注解上设置 `StableEntryStem` 或 `FullPublicEntry`，除非你真的希望每个派生类型共享同一个公开 Entry。这几乎总是错误的。稳定 Entry 覆写应写在具体类上。
+
+## Content Pack
+
+当集中批次比散落注解更易读时，使用 content pack。
 
 ```csharp
 RitsuLibFramework.CreateContentPack("MyMod")
-    .Character<MyCharacter>()
-    .Card<MyCardPool, MyCard>()
-    .Relic<MyRelicPool, MyRelic>()
-    .CardKeywordOwnedByLocNamespace("my_keyword", iconPath: "res://MyMod/art/kw.png")
-    .Story<MyStory>()
-    .Epoch<MyEpoch>()
-    .RequireEpoch<MyCard, MyEpoch>()
-    .Custom(ctx => { /* 任意注册逻辑 */ })
+    .Card<MyCardPool, MyStrike>()
+    .Relic<MyRelicPool, MyStarterRelic>()
+    .Potion<MyPotionPool, MyPotion>()
+    .Power<MyPower>()
+    .ActEvent<MyAct, MyEvent>()
+    .CardKeywordOwnedByLocNamespace("bleeding")
     .Apply();
 ```
 
-`Apply()` 返回 `ModContentPackContext`，可用于进一步访问各注册器。
+重要 pack 方法：
 
----
+| 区域 | 方法 |
+| --- | --- |
+| 池内容 | `.Card<TPool,TCard>()`、`.Relic<TPool,TRelic>()`、`.Potion<TPool,TPotion>()` |
+| 稳定 Entry | 接收 `ModelPublicEntryOptions.FromStem(...)` 或 `FromFullPublicEntry(...)` 的重载 |
+| 占位内容 | `.PlaceholderCard<TPool>(stem)`、`.PlaceholderRelic<TPool>(stem)`、`.PlaceholderPotion<TPool>(stem)` |
+| 角色 | `.Character<T>()`、`.Character<T>(entry => ...)`、`.CharacterStarterCard<TCharacter,TCard>()`、初始遗物 / 药水辅助方法 |
+| 世界内容 | `.Act<T>()`、`.Monster<T>()`、`.ActEncounter<TAct,TEncounter>()`、`.SharedEvent<T>()`、`.ActEvent<TAct,TEvent>()` |
+| Ancient | `.SharedAncient<T>()`、`.ActAncient<TAct,TAncient>()`、`.AncientOption<TAncient>(rule)` |
+| 关键词与 ID | `.CardKeywordOwnedByLocNamespace(...)`、`.KeywordOwned(...)`、`.CardTagOwned(...)` |
+| UI | `.CardPileOwned(...)`、`.TopBarButtonOwned(...)` |
+| 时间线与解锁 | `.Story<T>()`、`.Epoch<T>()`、`.StoryEpoch<TStory,TEpoch>()`、`.RequireEpoch<TModel,TEpoch>()`、解锁辅助方法 |
+| 批量输入 | `.ContentManifest(...)`、`.KeywordManifest(...)`、`.PackManifest(...)`、`.Manifest(...)` |
+| 自定义逻辑 | `.Custom(ctx => ...)` |
 
-## 模型 ID 规则
+不要让同一个模型同时由注解和 content pack 注册，除非你明确接受重复注册被跳过。每类内容最好有一个清晰的来源。
 
-通过 RitsuLib 注册的模型，其 `ModelId.Entry` 使用以下固定格式：
+## 模型模板
 
-```
+模板是可选基类，用来提供 RitsuLib 约定和钩子：
+
+| 模型 | 模板 |
+| --- | --- |
+| 卡牌 | `ModCardTemplate` |
+| 遗物 | `ModRelicTemplate` |
+| 药水 | `ModPotionTemplate` |
+| 能力 | `ModPowerTemplate` |
+| 角色 | `ModCharacterTemplate<TCardPool, TRelicPool, TPotionPool>` |
+| 事件 | `ModEventTemplate` |
+| Ancient 事件 | `ModAncientEventTemplate` |
+| Encounter / Monster / Act | `ModEncounterTemplate`、`ModMonsterTemplate`、`ModActTemplate` |
+| Story / Epoch | `ModStoryTemplate`、`ModEpochTemplate` |
+
+大多数显示文本仍然应写在本地化 JSON 里。游戏基类已经从 `LocString` 表读取文本时，不要在模型上编造不存在的 `Title` 或 `Description` 覆写。
+
+## Entry ID
+
+RitsuLib 自有的池内容会得到固定公开 Entry：
+
+```text
 <MODID>_<CATEGORY>_<TYPENAME>
 ```
 
-每个字段规范化为**全大写、以下划线分隔**的标识符。
+`MyMod` 下的卡牌 `MyStrike` 会变成：
 
-### 示例（Mod id `MyMod`）
-
-| C# 类型 | 类别 | ModelId.Entry |
-|---|---|---|
-| `MyStrike` | card | `MY_MOD_CARD_MY_STRIKE` |
-| `MyStarterRelic` | relic | `MY_MOD_RELIC_MY_STARTER_RELIC` |
-| `MyCharacter` | character | `MY_MOD_CHARACTER_MY_CHARACTER` |
-
-> 同一 Mod、同一类别下两个 CLR 类型名相同的模型会产生 Entry 冲突，必须通过重命名解决。
-
----
-
-## 本地化规则
-
-游戏本地化 Key 直接基于固定 `ModelId.Entry` 编写：
-
-```json
-{
-  "MY_MOD_CARD_MY_STRIKE.title": "我的打击",
-  "MY_MOD_CARD_MY_STRIKE.description": "造成 {damage} 点伤害。",
-  "MY_MOD_RELIC_MY_STARTER_RELIC.title": "我的起始遗物"
-}
+```text
+MY_MOD_CARD_MY_STRIKE
 ```
 
-`RitsuLibFramework.CreateModLocalization(...)` 是独立的本地化工具，与游戏的 `LocString` 模型 Key 管线相互独立。
+Entry 会用于存档、模型 ID、本地化 key、资源默认路径、解锁规则和跨 Mod 引用。发布后应视为稳定 ID。
 
----
-
-## 资源覆写规则
-
-RitsuLib 通过接口匹配，在渲染时将默认资源替换为 Mod 提供的资源。
-
-### 卡牌资源覆写
-
-继承 `ModCardTemplate` 后，通过 `AssetProfile`（推荐）或单独属性覆写：
+类型改名但已发布 Entry 必须保持不变时，使用 `StableEntryStem` / `ModelPublicEntryOptions.FromStem(...)`：
 
 ```csharp
-public class MyCard : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
+[RegisterCard(typeof(MyCardPool), StableEntryStem = "my_strike")]
+public sealed class RenamedStrike : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
 {
-    // 统一通过 AssetProfile 配置（推荐）
-    public override CardAssetProfile AssetProfile => new()
-    {
-        PortraitPath      = "res://MyMod/art/my_card.png",
-        FramePath         = "res://MyMod/art/frame.png",
-        FrameMaterialPath = "res://MyMod/art/frame.material",
-    };
-
-    // 或单独覆写某一项
-    public override string? CustomPortraitPath => "res://MyMod/art/my_card.png";
 }
 ```
 
-卡牌支持的覆写大致包括 portrait、frame、portrait border、energy icon、overlay 与 banner 相关资源。
-
-### 其他内容资源覆写
-
-| 内容类型 | 支持字段 |
-|---|---|
-| Relic | icon、icon outline、big icon |
-| Power | icon、big icon |
-| Orb | 图标、视觉场景 |
-| Potion | image、outline |
-
-覆写行为如下：
-1. 模型必须实现对应的 override 接口（直接或通过 `Mod*Template`）
-2. override 成员必须返回非空路径
-3. 如果资源路径不存在，RitsuLib 会输出一次警告，并回退到原始资源
-
-这点对角色资源尤其重要，因为原版游戏对缺失角色资源几乎没有安全兜底。
-
-完整资源配置结构、路径工厂辅助方法、占位角色规则与诊断策略见 [资源配置与回退规则](AssetProfilesAndFallbacks.md)。
-
----
-
-## 注册时机
-
-所有内容注册必须在框架冻结内容注册之前完成（游戏早期引导阶段）。冻结后继续注册属于无效操作并可能抛出异常。
-
-冻结时触发的事件：`ContentRegistrationClosedEvent`
-
----
-
-## 兼容规则
-
-固定 Entry 规则**只作用于**通过 RitsuLib 内容注册器显式注册的模型类型，处理点为 `ModelDb.GetEntry(Type)`。未经 RitsuLib 注册的模型不受影响。
-
----
-
-## 相关文档
-
-- [快速入门](GettingStarted.md)
-- [内容包与注册器](ContentPacksAndRegistries.md)
-- [角色与解锁模板](CharacterAndUnlockScaffolding.md)
-- [自定义事件](CustomEvents.md)
-- [卡牌动态变量](CardDynamicVarToolkit.md)
-- [本地化与关键词](LocalizationAndKeywords.md)
-- [框架设计](FrameworkDesign.md)
-- [资源配置与回退规则](AssetProfilesAndFallbacks.md)
+避免使用 `TESTCARD` 这类全大写 CLR 类型名。游戏原版 Entry 解析会在某些情形下错误拆分这种名称；当前 0.105.x 行为里，`TESTCARD` 可能变成
+`T_ES_TC_AR_D`。请写 `TestCard`；名称中有缩写时，也优先写 `UrlParser` 而不是 `URLParser`。

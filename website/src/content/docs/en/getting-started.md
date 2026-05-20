@@ -2,109 +2,103 @@
 title: "Getting Started"
 ---
 
-This guide walks through the full setup — from declaring the dependency to registering your first content.
+## Install
 
----
+Add the package to your mod project:
 
-## 1. Declare the Dependency
+```xml
+<PackageReference Include="STS2.RitsuLib" />
+```
 
-Add `STS2-RitsuLib` to your `mod_manifest.json`:
+Declare the runtime dependency in `mod_manifest.json`. For game API 0.105.x and newer, use the object form:
 
 ```json
 {
-  "id": "MyMod",
-  "name": "My Mod",
-  "dependencies": ["STS2-RitsuLib"]
+  "dependencies": [
+    { "id": "STS2-RitsuLib" }
+  ]
 }
 ```
 
----
+For older game API branches, use the legacy string form because older manifest parsers may fail on dependency objects:
 
-## 2. Initialize Your Mod
+```json
+{
+  "dependencies": [
+    "STS2-RitsuLib"
+  ]
+}
+```
 
-Use `[ModInitializer]` to declare the entry point. Obtain a logger, create a patcher, and register content:
+If you do not use Central Package Management, choose the current package version through your package manager or IDE.
+Use `STS2.RitsuLib.Compat.<api-version>` only when the mod targets an older Slay the Spire 2 API branch.
+
+## Initialize
+
+Register your assembly for RitsuLib discovery from the mod initializer. This is required for CLR attribute registration.
 
 ```csharp
 using System.Reflection;
-using STS2RitsuLib;
-using STS2RitsuLib.Patching.Core;
 using MegaCrit.Sts2.Core.Logging;
 using MegaCrit.Sts2.Core.Modding;
+using STS2RitsuLib;
+using STS2RitsuLib.Interop;
+using STS2RitsuLib.Patching.Core;
 
 [ModInitializer(nameof(Initialize))]
-public static class MyMod
+public static class MyModEntry
 {
+    public const string ModId = "MyMod";
     public static Logger Logger { get; private set; } = null!;
 
     public static void Initialize()
     {
-        Logger = RitsuLibFramework.CreateLogger("MyMod");
-        RitsuLibFramework.EnsureGodotScriptsRegistered(Assembly.GetExecutingAssembly(), Logger);
+        var assembly = Assembly.GetExecutingAssembly();
 
-        var patcher = RitsuLibFramework.CreatePatcher("MyMod", "core-patches");
+        Logger = RitsuLibFramework.CreateLogger(ModId);
+        ModTypeDiscoveryHub.RegisterModAssembly(ModId, assembly);
+        RitsuLibFramework.EnsureGodotScriptsRegistered(assembly, Logger);
+
+        var patcher = RitsuLibFramework.CreatePatcher(ModId, "main");
         patcher.RegisterPatches<MyModPatches>();
-        patcher.PatchAll();
+        RitsuLibFramework.ApplyRequiredPatcher(patcher, DisableMod);
+    }
 
-        RitsuLibFramework.CreateContentPack("MyMod")
-            .Character<MyCharacter>()
-            .Card<MyCardPool, MyCard>()
-            .Card<MyCardPool, MyOtherCard>()
-            .Relic<MyRelicPool, MyRelic>()
-            .Apply();
+    private static void DisableMod()
+    {
+        // Mark your own mod disabled when a required patch cannot apply.
     }
 }
 ```
 
-For the full mapping of fluent methods, `ModContentRegistry` calls, and `IContentRegistrationEntry` types (enchantments, achievements, shared pools, manifests, etc.), see [Content Packs & Registries](../content-packs-and-registries/).
+Call `EnsureGodotScriptsRegistered(...)` only when your mod contains C# scripts attached to `.tscn` scenes. Pure model or
+patch mods can omit it.
 
-`CreatePatcher` takes a `patcherName` used for log identification. A mod may create multiple patchers. See [Patching Guide](../patching-guide/) for the full patch workflow.
+## Register Content
 
-If your mod uses custom Godot C# scene scripts, keep `EnsureGodotScriptsRegistered(...)` in your initializer. See [Godot Scene Authoring](../godot-scene-authoring/).
-
----
-
-## 3. Define a Card Pool
-
-Use `TypeListCardPoolModel` for pool visuals and metadata (frame, energy color, etc.). **Each card that belongs in the pool** must be registered via `.Card<MyCardPool, MyCard>()`, `CardRegistrationEntry<…>`, or an equivalent step so `ModContentRegistry` records ownership and fixed `ModelId.Entry`, and `ModHelper.AddModelToPool` runs.
-
-The base class already exposes a **default empty** `CardTypes` sequence and marks it `[Obsolete]`: **new mods should not override `CardTypes`** (no need to write `=> []` either). Match section 2 and keep the content pack / manifest as the **single source of truth** for pool cards.
+For most content, put registration attributes on the model class. The registration point stays next to the class that is
+being registered.
 
 ```csharp
 using Godot;
+using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Models;
+using STS2RitsuLib.Interop.AutoRegistration;
+using STS2RitsuLib.Scaffolding.Content;
 
-public class MyCardPool : TypeListCardPoolModel
+public sealed class MyCardPool : TypeListCardPoolModel
 {
-    public override string Title => "My Pool";
+    public override string Title => "My Cards";
     public override string EnergyColorName => "orange";
     public override string CardFrameMaterialPath => "card_frame_orange";
-    public override Color DeckEntryCardColor => new("d2a15a");
+    public override Color DeckEntryCardColor => new("d58b2f");
     public override bool IsColorless => false;
 }
-```
 
-Legacy mods that still **override** `CardTypes` with a type list will get **CS0618**, and pairing that with pack registration for the same pool + card still duplicates `AllCards`—migrate to pack-only registration or add `#pragma warning disable CS0618` for that override. Listing `CardTypes` only (no card registration) generally skips RitsuLib fixed entries and ownership—avoid it.
-
-**Generated placeholders**: If you need stable `ModelId` values before authoring each card type (rewards, unlocks, etc.), use `PlaceholderCard<TPool>(...)` and the relic/potion equivalents. Full API, examples, and **required warnings** (save entry stability, multiplayer `ModelIdSerializationCache` hash, no gameplay effects) are in the “Generated placeholder content” section of [Content Packs & Registries](../content-packs-and-registries/).
-
----
-
-## 4. Define a Card
-
-Inherit from `ModCardTemplate` and pass base properties in the primary constructor:
-
-```csharp
-public class MyCard : ModCardTemplate(
-    baseCost: 1,
-    type: CardType.Attack,
-    rarity: CardRarity.Common,
-    target: TargetType.SingleEnemy)
+[RegisterCard(typeof(MyCardPool))]
+public sealed class MyStrike
+    : ModCardTemplate(1, CardType.Attack, CardRarity.Common, TargetType.SingleEnemy)
 {
-    public override string Title => "Strike";
-    public override string Description => $"Deal {Damage} damage.";
-
-    // Optional custom portrait
-    public override string? CustomPortraitPath => "res://MyMod/art/strike.png";
-
     public override void Use(ICombatContext ctx, ICreatureState user, ICreatureState? target)
     {
         ctx.DealDamage(user, target, Damage);
@@ -112,93 +106,29 @@ public class MyCard : ModCardTemplate(
 }
 ```
 
----
-
-## 5. Localization Keys
-
-The `ModelId.Entry` for any RitsuLib-registered model is derived as:
-
-```
-<MODID>_<CATEGORY>_<TYPENAME>
-```
-
-All segments are normalized to UPPER_SNAKE_CASE.
-
-| Mod Id | C# Type | Category | Entry |
-|---|---|---|---|
-| `MyMod` | `MyCard` | card | `MY_MOD_CARD_MY_CARD` |
-| `MyMod` | `MyRelic` | relic | `MY_MOD_RELIC_MY_RELIC` |
-| `MyMod` | `MyCharacter` | character | `MY_MOD_CHARACTER_MY_CHARACTER` |
-
-Localization file example:
+Write the display text in the matching localization table:
 
 ```json
 {
-  "MY_MOD_CARD_MY_CARD.title": "Strike",
-  "MY_MOD_CARD_MY_CARD.description": "Deal {damage} damage."
+  "MY_MOD_CARD_MY_STRIKE.title": "Measured Strike",
+  "MY_MOD_CARD_MY_STRIKE.description": "Deal {Damage} damage."
 }
 ```
 
----
-
-## 6. Subscribe to Lifecycle Events
+Use a content pack instead when the registration is easier to read as a batch:
 
 ```csharp
-// Runs once after game is ready
-RitsuLibFramework.SubscribeLifecycle<GameReadyEvent>(evt =>
-{
-    Logger.Info("Game ready.");
-});
-
-// On every combat start
-RitsuLibFramework.SubscribeLifecycle<CombatStartingEvent>(evt =>
-{
-    // evt.RunState, evt.CombatState
-});
+RitsuLibFramework.CreateContentPack("MyMod")
+    .Card<MyCardPool, MyStrike>()
+    .Relic<MyRelicPool, MyStarterRelic>()
+    .Apply();
 ```
-
-Replayable events (`IReplayableFrameworkLifecycleEvent`) fire immediately upon late subscription if the event has already occurred.
-
----
-
-## 7. Persistent Data
-
-Use `BeginModDataRegistration` for batch key registration. Persistent entries are class-based and need both a registry key and a file name:
-
-```csharp
-public sealed class CounterData
-{
-    public int Value { get; set; }
-}
-
-using (RitsuLibFramework.BeginModDataRegistration("MyMod"))
-{
-    var store = RitsuLibFramework.GetDataStore("MyMod");
-    store.Register<CounterData>(
-        key: "my_counter",
-        fileName: "counter.json",
-        scope: SaveScope.Profile,
-        defaultFactory: () => new CounterData());
-}
-```
-
-See [Persistence Guide](../persistence-guide/) for scopes, reload timing, and migrations.
-
----
 
 ## Next Steps
 
-- [Content Authoring Toolkit](../content-authoring-toolkit/)
-- [Character & Unlock Templates](../character-and-unlock-scaffolding/)
-- [Card Dynamic Variables](../card-dynamic-var-toolkit/)
-- [Lifecycle Events](../lifecycle-events/)
-- [Patching Guide](../patching-guide/)
-- [Persistence Guide](../persistence-guide/)
-- [Localization & Keywords](../localization-and-keywords/)
-- [Framework Design](../framework-design/)
-- [Content Packs & Registries](../content-packs-and-registries/)
-- [Godot Scene Authoring](../godot-scene-authoring/)
-- [Timeline & Unlocks](../timeline-and-unlocks/)
-- [Asset Profiles & Fallbacks](../asset-profiles-and-fallbacks/)
-- [Diagnostics & Compatibility](../diagnostics-and-compatibility/)
+- Registration APIs: [Content authoring](../content-authoring-toolkit/)
+- Localization keys: [Localization and keywords](../localization-and-keywords/)
+- Characters: [Character and unlock scaffolding](../character-and-unlock-scaffolding/)
+- Saves: [Persistence](../persistence-guide/)
+- Settings: [Mod settings](../mod-settings/)
 

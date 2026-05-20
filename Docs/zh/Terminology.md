@@ -1,41 +1,37 @@
-# 术语表
-
-本文定义 RitsuLib 文档中统一使用的核心术语及推荐译法。
-
----
+# 术语
 
 ## 核心术语
 
-| 英文术语 | 推荐中文 | 说明 |
-|---|---|---|
-| settings UI | 设置界面 | 指整体玩家配置界面。 |
-| page | 页面 | 设置界面中的单个已注册页面。 |
-| section | 分区 | 页面中的结构化分组。 |
-| entry | 条目 | 分区中的单行可见控件或文本项。 |
-| binding | 绑定 | UI 与存储值或内存状态之间的读写连接。 |
-| persistence | 持久化 | 存储层与保存生命周期。 |
-| persisted | 已持久化 / 会持久化 | 用于描述会写入持久化层的值。 |
-| preview-only | 仅预览 | 指不会写入持久化层的控件或绑定。 |
-| fallback | 回退 | 兼容或缺失数据场景下的回退行为。 |
-| compatibility fallback | 兼容回退 | 优先使用该术语，避免使用“垫片”。 |
-| bridge patch | 桥接补丁 | 将 Mod 内容转发到原版逻辑检查点的补丁。 |
-| registry | 注册器 | 某类内容的运行时注册容器。 |
-| content pack | 内容包 | 向多个注册器写入内容的便捷入口。 |
-| builder | 构建器 | 用于链式构造页面、分区或内容的 API。 |
-| override | 覆写 | 对资源路径、行为或值来源进行替换。 |
-| placeholder | 占位值 | 数据缺失时使用的临时值。 |
-| scope | 作用域 | 持久化值的存储范围。 |
-| profile | 档位 | 按玩家档位区分的保存范围。 |
-| global | 全局 | 跨档位共享的保存范围。 |
-| epoch | 纪元（Epoch） | 中文文档首次出现可带英文，后续可简称“纪元”。 |
-| story | 故事（Story） | 中文文档首次出现可带英文，后续可简称“故事”。 |
-| Ancient dialogue | Ancient 对话 | 与游戏系统保持一致，不改写为其他称呼。 |
+| 术语 | 含义 |
+| --- | --- |
+| Mod id | Mod 清单中的 id，例如 `MyMod`。RitsuLib 用它生成稳定 ID。 |
+| Model | 游戏里的 `AbstractModel` 子类：卡牌、遗物、药水、角色、事件、Act、能力、Orb 等。 |
+| Pool | 游戏池模型，例如 `CardPoolModel`、`RelicPoolModel`、`PotionPoolModel`。卡牌、遗物、药水需要注册到池。 |
+| Content pack | 由 `RitsuLibFramework.CreateContentPack(modId)` 创建的链式注册批次。推荐优先使用。 |
+| Registry | 每个 Mod 独立的注册器，例如 `ModContentRegistry`、`ModKeywordRegistry`、`ModUnlockRegistry`。只有 builder 不合适时才直接使用。 |
+| Public entry | RitsuLib 为自有模型生成的稳定 `ModelId.Entry`。大多数模型本地化 key 也以它为 stem。 |
+| Owned id | 带 Mod 归属的 ID，例如 `MY_MOD_KEYWORD_BURNING`。优先使用 owned id，避免扁平全局 id 冲突。 |
+| Lifecycle event | 通过 `RitsuLibFramework.SubscribeLifecycle<TEvent>(...)` 发布的强类型事件。 |
+| Replayable event | 已经发生后仍会立即补发给新订阅者的生命周期事件。 |
+| Scope | 持久化位置：`Global`、`Profile`、`RunSidecar` 或 `InMemory`。 |
 
----
+## 命名规则
 
-## 相关文档
+RitsuLib 会把公开 stem 规范化为全大写下划线格式。非字母数字分隔符合并成 `_`，驼峰名称会被拆开。
 
-- [框架设计](FrameworkDesign.md)
-- [Mod 设置界面](ModSettings.md)
-- [诊断与兼容层](DiagnosticsAndCompatibility.md)
-- [本地化与关键词](LocalizationAndKeywords.md)
+| 输入 | 规范化后 |
+| --- | --- |
+| `MyMod` | `MY_MOD` |
+| `com.example.my-mod` | `COM_EXAMPLE_MY_MOD` |
+| `StarterRelic` | `STARTER_RELIC` |
+
+CLR 模型类型名请使用可读 PascalCase。避免 `TESTCARD` 这类全大写名称：未走 RitsuLib 固定 Entry 覆写的原版路径可能会把它拆成
+`T_ES_TC_AR_D`。请写 `TestCard`；名称中有缩写时，也优先写 `UrlParser` 而不是 `URLParser`。
+
+默认模型 Entry：
+
+```text
+<MODID>_<CATEGORY>_<TYPENAME>
+```
+
+关键词、卡牌标签、卡堆和顶栏按钮的 owned id 使用同一规则，中间段固定为 `KEYWORD`、`CARDTAG`、`CARDPILE` 或 `TOPBARBUTTON`。
