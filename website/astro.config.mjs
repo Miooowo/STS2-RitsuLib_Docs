@@ -1,6 +1,7 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import { localeRedirectScript } from './scripts/locale-redirect-snippet.mjs';
 
 // GitHub Pages 项目页：https://miooowo.github.io/STS2-RitsuLib_Docs/
 const site = 'https://miooowo.github.io';
@@ -38,60 +39,12 @@ export default defineConfig({
 					href: 'https://github.com/Miooowo/STS2-RitsuLib_Docs',
 				},
 			],
-			// 静态部署（GitHub Pages）无服务端中间件：在中文首页用客户端根据语言偏好跳转 /en/（与 cookie `ritsulib-locale` 协同）
+			// 静态 Pages：按 cookie / 浏览器语言在 zh 与 /en/ 全站路径间跳转（locale-redirect-snippet.mjs）
 			head: [
 				{
 					tag: 'script',
 					attrs: {},
-					content: `(() => {
-	var B = ${JSON.stringify(base + '/')};
-	var PC = B.endsWith('/') ? B.slice(0, -1) : B;
-	function pathNorm() {
-		var p = location.pathname;
-		return p.endsWith('/') && p.length > 1 ? p.slice(0, -1) : p;
-	}
-	function isZhHome() {
-		var p = pathNorm();
-		return p === PC || p === PC + '/index.html';
-	}
-	function isEnHome() {
-		var p = pathNorm();
-		return p === PC + '/en' || p === PC + '/en/index.html';
-	}
-	function getCookie(name) {
-		var m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
-		return m ? decodeURIComponent(m[1]) : '';
-	}
-	function setCookie(name, val) {
-		document.cookie =
-			name + '=' + encodeURIComponent(val) + ';path=/;max-age=31536000;samesite=lax';
-	}
-	if (isEnHome()) {
-		setCookie('ritsulib-locale', 'en');
-		return;
-	}
-	if (!isZhHome()) return;
-	var c = getCookie('ritsulib-locale');
-	if (c === 'en') {
-		setCookie('ritsulib-locale', 'zh');
-		return;
-	}
-	if (c === 'zh') return;
-	var langs = (navigator.languages || [navigator.language || '']).map(function (s) {
-		return String(s).toLowerCase().split('-')[0];
-	});
-	function prefersEn() {
-		for (var i = 0; i < langs.length; i++) {
-			if (langs[i] === 'zh') return false;
-			if (langs[i] === 'en') return true;
-		}
-		return true;
-	}
-	if (prefersEn()) {
-		setCookie('ritsulib-locale', 'en');
-		location.replace(PC + '/en/');
-	} else setCookie('ritsulib-locale', 'zh');
-})();`,
+					content: localeRedirectScript(base),
 				},
 			],
 			sidebar: [
